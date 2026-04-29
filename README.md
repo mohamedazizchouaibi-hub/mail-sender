@@ -17,8 +17,8 @@ A desktop app that uses any LLM to write and send personalized cold emails at sc
 
 ```bash
 # 1. Clone and enter the folder
-git clone <repo-url>
-cd email-outreach-app
+git clone mohamedazizchouaibi-hub/mail-sender
+cd mail-sender
 
 # 2. Install dependencies
 pip install -r requirements.txt
