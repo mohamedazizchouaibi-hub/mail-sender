@@ -59,8 +59,9 @@ except ImportError:
 # ── Constants ──────────────────────────────────────────────────────────────────
 APP_NAME    = "قل الحمد لله"
 APP_VERSION = "1.0.0"
-LOG_FILE    = Path("outreach_log.json")
-MAX_CV_CHARS = 3000
+LOG_FILE      = Path("outreach_log.json")
+SETTINGS_FILE = Path("outreach_settings.json")
+MAX_CV_CHARS  = 3000
 EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 # ── Palette (Catppuccin Mocha) ─────────────────────────────────────────────────
@@ -299,10 +300,37 @@ def get_field(row: Dict[str, str], *keys: str, default: str = "") -> str:
     return default
 
 
+def load_template(path: str) -> str:
+    suffix = Path(path).suffix.lower()
+    if suffix == ".txt":
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except Exception as e:
+            return f"[Template error: {e}]"
+    if suffix == ".pdf":
+        if not HAS_PDF:
+            return "[PDF parsing unavailable — install PyPDF2 or pypdf]"
+        try:
+            reader = PdfReader(path)
+            return " ".join(p.extract_text() or "" for p in reader.pages).strip()
+        except Exception as e:
+            return f"[PDF error: {e}]"
+    if suffix in (".docx", ".doc"):
+        if not HAS_DOCX:
+            return "[DOCX parsing unavailable — install python-docx]"
+        try:
+            doc = DocxDoc(path)
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except Exception as e:
+            return f"[DOCX error: {e}]"
+    return "[Unsupported format — use .txt, .pdf, or .docx]"
+
+
 def build_prompt(cv_text: str, contact: Dict[str, str], goal: str,
                  company_context: str = "",
                  sender_name: str = "", sender_email: str = "",
-                 sender_phone: str = "", sender_extra: str = "") -> str:
+                 sender_phone: str = "", sender_extra: str = "",
+                 template_text: str = "") -> str:
     name    = get_field(contact, "name", "full_name", "first_name", "contact", default="there")
     company = get_field(contact, "company", "organization", "employer", "firm",
                         default="your organization")
@@ -339,6 +367,16 @@ def build_prompt(cv_text: str, contact: Dict[str, str], goal: str,
         sig_parts.append(sender_email)
     signature = " / ".join(sig_parts)
 
+    template_block = (
+        f'\nEmail Template (follow this structure and tone closely, '
+        f'but personalize all placeholder content for this specific recipient):\n"""\n{template_text}\n"""\n'
+        if template_text else ""
+    )
+    template_rule = (
+        "\n8. Follow the structure and tone of the provided email template above."
+        if template_text else ""
+    )
+
     return f"""You are an expert email copywriter helping {sender_label} reach out for: {goal}
 
 About the sender ({sender_label}):
@@ -351,7 +389,7 @@ The full CV / Resume (use this as the authoritative source for the sender's back
 Recipient:
 - Name: {name}
 - Company: {company}
-{role_line}{extras}{context_block}
+{role_line}{extras}{context_block}{template_block}
 Task: Write a highly personalized, professional, concise outreach email from {sender_label}.
 
 Rules:
@@ -361,7 +399,7 @@ Rules:
 4. Keep the body to 3-4 short paragraphs — no fluff, no generic opener.
 5. End with a soft call to action ("I'd welcome a quick discussion") before the signature.
 6. Always close with this exact signature block on its own lines: {signature}
-7. Never use "I hope this email finds you well" or similar clichés.
+7. Never use "I hope this email finds you well" or similar clichés.{template_rule}
 
 Respond with ONLY valid JSON (no markdown, no extra text):
 {{"subject": "...", "body": "..."}}"""
@@ -739,11 +777,11 @@ class GenerationThread(QThread):
     def __init__(self, cfg: Dict[str, Any], contacts: List[Dict],
                  cv_text: str, parent=None):
         super().__init__(parent)
-        self.cfg      = cfg
-        self.contacts = contacts
-        self.cv_text  = cv_text
-        self._stopped = False
-        self._researcher = CompanyResearcher()
+        self.cfg           = cfg
+        self.contacts      = contacts
+        self.cv_text       = cv_text
+        self._stopped      = False
+        self._researcher   = CompanyResearcher()
 
     def stop(self):
         self._stopped = True
@@ -799,6 +837,7 @@ class GenerationThread(QThread):
                         sender_email=cfg.get("sender_email", ""),
                         sender_phone=cfg.get("sender_phone", ""),
                         sender_extra=cfg.get("sender_extra", ""),
+                        template_text=cfg.get("template_text", ""),
                     )
                 )
                 subject, body = parse_llm_json(raw)
@@ -871,7 +910,7 @@ class PreviewAllDialog(QDialog):
         info_lbl.setStyleSheet(f"color: {C['blue']}; font-weight: 600; font-size: 13px; background: transparent;")
         hh.addWidget(info_lbl)
         hh.addStretch()
-        hint = QLabel("Click a row to edit  ·  uncheck to skip")
+        hint = QLabel("Click a row to preview & edit  ·  uncheck to skip")
         hint.setStyleSheet(f"color: {C['overlay0']}; font-size: 11px; background: transparent;")
         hh.addWidget(hint)
         root.addWidget(hdr)
@@ -957,10 +996,21 @@ class PreviewAllDialog(QDialog):
         self.lbl_context.setVisible(False)
         v.addWidget(self.lbl_context)
 
+        subj_row = QHBoxLayout()
         lbl_subj = QLabel("Subject:")
         lbl_subj.setStyleSheet(f"color: {C['subtext']}; font-weight: 500;")
-        v.addWidget(lbl_subj)
+        subj_row.addWidget(lbl_subj)
+        subj_row.addStretch()
+        lbl_edit_hint = QLabel("✏  editable")
+        lbl_edit_hint.setStyleSheet(f"color: {C['peach']}; font-size: 11px;")
+        subj_row.addWidget(lbl_edit_hint)
+        v.addLayout(subj_row)
         self.inp_subject = QLineEdit()
+        self.inp_subject.setPlaceholderText("Select a draft to edit its subject…")
+        self.inp_subject.setStyleSheet(
+            f"QLineEdit {{ border: 1px solid {C['peach']}; background-color: {C['mantle']}; }}"
+            f"QLineEdit:focus {{ border-color: {C['yellow']}; background-color: {C['surface0']}; }}"
+        )
         self.inp_subject.textEdited.connect(self._on_subject_edited)
         v.addWidget(self.inp_subject)
 
@@ -969,6 +1019,11 @@ class PreviewAllDialog(QDialog):
         v.addWidget(lbl_body)
         self.txt_body = QTextEdit()
         self.txt_body.setMinimumHeight(360)
+        self.txt_body.setPlaceholderText("Select a draft from the list to preview and edit the email body…")
+        self.txt_body.setStyleSheet(
+            f"QTextEdit {{ border: 1px solid {C['peach']}; background-color: {C['crust']}; }}"
+            f"QTextEdit:focus {{ border-color: {C['yellow']}; }}"
+        )
         self.txt_body.textChanged.connect(self._on_body_edited)
         v.addWidget(self.txt_body, 1)
         return w
@@ -1247,6 +1302,7 @@ class CampaignThread(QThread):
                         sender_email=cfg.get("sender_email", ""),
                         sender_phone=cfg.get("sender_phone", ""),
                         sender_extra=cfg.get("sender_extra", ""),
+                        template_text=cfg.get("template_text", ""),
                     )
                 )
                 subject, body = parse_llm_json(raw)
@@ -1322,8 +1378,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1020, 700)
         self.resize(1200, 800)
 
-        self._cv_path   = ""
-        self._csv_path  = ""
+        self._cv_path       = ""
+        self._csv_path      = ""
+        self._template_path = ""
+        self._template_text = ""
         self._contacts: List[Dict] = []
         self._cv_text   = ""
         self._thread: Optional[CampaignThread] = None
@@ -1333,8 +1391,115 @@ class MainWindow(QMainWindow):
         self._sender_name  = ""
         self._sender_phone = ""
         self._sender_extra = ""
+        self._cv_llm_extracted = False
 
         self._build_ui()
+        self._load_settings()
+        self._connect_save_signals()
+
+    # ── Persistence ───────────────────────────────────────────────────────────
+    def _save_settings(self):
+        data = {
+            "goal":          self.inp_goal.text().strip(),
+            "provider":      self.cmb_provider.currentText(),
+            "model":         self.inp_model.text().strip(),
+            "api_key":       self.inp_api_key.text().strip(),
+            "sender_email":  self.inp_sender.text().strip(),
+            "app_password":  self.inp_password.text().strip(),
+            "delay_min":     self.spn_delay.value(),
+            "attach_cv":     self.chk_attach.isChecked(),
+            "preview":       self.chk_preview.isChecked(),
+            "research":      self.chk_research.isChecked(),
+            "cv_path":       self._cv_path,
+            "csv_path":      self._csv_path,
+            "template_path": self._template_path,
+        }
+        try:
+            SETTINGS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+        except Exception:
+            pass
+
+    def _load_settings(self):
+        if not SETTINGS_FILE.exists():
+            return
+        try:
+            data = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            return
+
+        if data.get("goal"):
+            self.inp_goal.setText(data["goal"])
+        if data.get("provider") and data["provider"] in [
+            self.cmb_provider.itemText(i) for i in range(self.cmb_provider.count())
+        ]:
+            self.cmb_provider.setCurrentText(data["provider"])
+        if data.get("model"):
+            self.inp_model.setText(data["model"])
+        if data.get("api_key"):
+            self.inp_api_key.setText(data["api_key"])
+        if data.get("sender_email"):
+            self.inp_sender.setText(data["sender_email"])
+        if data.get("app_password"):
+            self.inp_password.setText(data["app_password"])
+        if data.get("delay_min"):
+            self.spn_delay.setValue(int(data["delay_min"]))
+        self.chk_attach.setChecked(bool(data.get("attach_cv", False)))
+        self.chk_preview.setChecked(bool(data.get("preview", False)))
+        self.chk_research.setChecked(bool(data.get("research", False)))
+
+        for attr, lbl_attr, loader, path_key in [
+            ("_cv_path",       "lbl_cv",       self._load_cv_file,       "cv_path"),
+            ("_csv_path",      "lbl_csv",       self._load_csv_file,      "csv_path"),
+            ("_template_path", "lbl_template",  self._load_template_file, "template_path"),
+        ]:
+            path = data.get(path_key, "")
+            if path and Path(path).exists():
+                loader(path)
+
+    def _load_cv_file(self, path: str):
+        self._cv_path = path
+        self._cv_text = parse_cv(path)
+        name = Path(path).name
+        self.lbl_cv.setText(name)
+        self.lbl_cv.setStyleSheet(f"color: {C['text']}; font-size: 12px;")
+        if not self._cv_text.startswith("["):
+            self._cv_llm_extracted = False
+            self._start_cv_extraction()
+
+    def _load_csv_file(self, path: str):
+        try:
+            self._csv_path = path
+            self._contacts = load_contacts(path)
+            name = Path(path).name
+            self.lbl_csv.setText(name)
+            self.lbl_csv.setStyleSheet(f"color: {C['text']}; font-size: 12px;")
+            n = len(self._contacts)
+            self.lbl_count.setText(f"✓  {n} contact{'s' if n != 1 else ''} loaded")
+            self.progress.setRange(0, n)
+            self.progress.setFormat(f"0 / {n}")
+        except Exception:
+            pass
+
+    def _load_template_file(self, path: str):
+        text = load_template(path)
+        if text.startswith("["):
+            return
+        self._template_path = path
+        self._template_text = text
+        self.lbl_template.setText(Path(path).name)
+        self.lbl_template.setStyleSheet(f"color: {C['text']}; font-size: 12px;")
+
+    def _connect_save_signals(self):
+        self.inp_goal.editingFinished.connect(self._save_settings)
+        self.inp_api_key.editingFinished.connect(self._save_settings)
+        self.inp_sender.editingFinished.connect(self._save_settings)
+        self.inp_password.editingFinished.connect(self._save_settings)
+        self.inp_model.editingFinished.connect(self._save_settings)
+        self.cmb_provider.currentTextChanged.connect(lambda _: self._save_settings())
+        self.spn_delay.valueChanged.connect(lambda _: self._save_settings())
+        self.chk_attach.toggled.connect(lambda _: self._save_settings())
+        self.chk_preview.toggled.connect(lambda _: self._save_settings())
+        self.chk_research.toggled.connect(lambda _: self._save_settings())
 
     # ── Build UI ──────────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -1462,6 +1627,19 @@ class MainWindow(QMainWindow):
         self.lbl_count = QLabel("")
         self.lbl_count.setStyleSheet(f"color: {C['green']}; font-size: 11px; padding-left: 96px;")
         lay.addWidget(self.lbl_count)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet(f"background: {C['surface0']}; max-height: 1px;")
+        lay.addWidget(sep2)
+
+        lay.addWidget(self._file_row("Template:", "lbl_template", self._browse_template))
+
+        lbl_tmpl_hint = QLabel("Optional — .txt, .pdf or .docx  ·  LLM will follow its structure")
+        lbl_tmpl_hint.setStyleSheet(
+            f"color: {C['overlay0']}; font-size: 11px; padding-left: 96px; font-style: italic;"
+        )
+        lay.addWidget(lbl_tmpl_hint)
         return grp
 
     def _grp_config(self) -> QGroupBox:
@@ -1648,23 +1826,27 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        self._cv_path = path
-        name = Path(path).name
-        self.lbl_cv.setText(name)
-        self.lbl_cv.setStyleSheet(f"color: {C['text']}; font-size: 12px;")
-        self._cv_text = parse_cv(path)
+        self._load_cv_file(path)
         if self._cv_text.startswith("["):
             self._append_log(f"CV parse warning: {self._cv_text}", "warn")
         else:
-            self._append_log(f"CV loaded: {name} ({len(self._cv_text)} chars)", "success")
-            self._cv_info_thread = CVInfoThread(
-                self._cv_text,
-                provider=self.cmb_provider.currentText(),
-                api_key=self.inp_api_key.text().strip(),
-                model=self.inp_model.text().strip(),
-            )
-            self._cv_info_thread.sig_done.connect(self._on_cv_info)
-            self._cv_info_thread.start()
+            self._append_log(f"CV loaded: {Path(path).name} ({len(self._cv_text)} chars)", "success")
+        self._save_settings()
+
+    def _browse_template(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Email Template", "",
+            "Text / Documents (*.txt *.pdf *.docx *.doc);;All Files (*)",
+        )
+        if not path:
+            return
+        text = load_template(path)
+        if text.startswith("["):
+            self._append_log(f"Template warning: {text}", "warn")
+            return
+        self._load_template_file(path)
+        self._append_log(f"Template loaded: {Path(path).name} ({len(text)} chars)", "success")
+        self._save_settings()
 
     def _browse_csv(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1674,21 +1856,28 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            self._csv_path = path
-            self._contacts = load_contacts(path)
-            name = Path(path).name
-            self.lbl_csv.setText(name)
-            self.lbl_csv.setStyleSheet(f"color: {C['text']}; font-size: 12px;")
-            n = len(self._contacts)
-            self.lbl_count.setText(f"✓  {n} contact{'s' if n != 1 else ''} loaded")
-            self.progress.setRange(0, n)
+            self._load_csv_file(path)
             self.progress.setValue(0)
-            self.progress.setFormat(f"0 / {n}")
-            self._append_log(f"CSV loaded: {name} — {n} contacts", "success")
+            n = len(self._contacts)
+            self._append_log(f"CSV loaded: {Path(path).name} — {n} contacts", "success")
+            self._save_settings()
         except Exception as e:
             QMessageBox.critical(self, "CSV Error", f"Failed to load CSV:\n{e}")
 
+    def _start_cv_extraction(self):
+        if self._cv_info_thread and self._cv_info_thread.isRunning():
+            return
+        self._cv_info_thread = CVInfoThread(
+            self._cv_text,
+            provider=self.cmb_provider.currentText(),
+            api_key=self.inp_api_key.text().strip(),
+            model=self.inp_model.text().strip(),
+        )
+        self._cv_info_thread.sig_done.connect(self._on_cv_info)
+        self._cv_info_thread.start()
+
     def _on_cv_info(self, info: dict):
+        self._cv_llm_extracted = True
         self._sender_name  = info.get("name",  "").strip()
         self._sender_phone = info.get("phone", "").strip()
         self._sender_extra = info.get("extra", "").strip()
@@ -1751,11 +1940,19 @@ class MainWindow(QMainWindow):
             "attach_cv":    self.chk_attach.isChecked(),
             "preview":      self.chk_preview.isChecked(),
             "research":     self.chk_research.isChecked(),
-            "sender_name":  self._sender_name,
-            "sender_email": self.inp_sender.text().strip(),
-            "sender_phone": self._sender_phone,
-            "sender_extra": self._sender_extra,
+            "sender_name":   self._sender_name,
+            "sender_email":  self.inp_sender.text().strip(),
+            "sender_phone":  self._sender_phone,
+            "sender_extra":  self._sender_extra,
+            "template_text": self._template_text,
         }
+
+    def _ensure_cv_extracted(self):
+        if self._cv_text and not self._cv_llm_extracted and self.inp_api_key.text().strip():
+            self._append_log("Extracting sender info from CV via LLM…", "info")
+            self._start_cv_extraction()
+            if self._cv_info_thread:
+                self._cv_info_thread.wait()
 
     def _start(self):
         err = self._validate()
@@ -1763,6 +1960,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Missing Input", err)
             return
 
+        self._ensure_cv_extracted()
         cfg = self._build_cfg()
         self.progress.setValue(0)
         self._is_paused = False
@@ -1798,6 +1996,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Missing Input", err)
             return
 
+        self._ensure_cv_extracted()
         cfg = self._build_cfg()
         cfg["preview"] = False
         self.progress.setValue(0)
@@ -1958,6 +2157,7 @@ class MainWindow(QMainWindow):
         self.lbl_log_count.setText(f"{self._log_entry_count} entr{'y' if self._log_entry_count == 1 else 'ies'}")
 
     def closeEvent(self, event):
+        self._save_settings()
         if self._cv_info_thread and self._cv_info_thread.isRunning():
             self._cv_info_thread.wait(2000)
         active = (
