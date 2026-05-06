@@ -508,22 +508,44 @@ def parse_llm_json(text: str) -> Tuple[str, str]:
 
 class LLMClient:
     _REGISTRY: Dict[str, Tuple[str, str]] = {
-        "OpenAI":      ("https://api.openai.com/v1/chat/completions",
-                        "openai/gpt-oss-120b"),
-        "Gemini":      ("https://generativelanguage.googleapis.com/v1beta/models",
-                        "gemini-2.0-flash"),
-        "Groq":        ("https://api.groq.com/openai/v1/chat/completions",
-                        "llama-3.3-70b-versatile"),
-        "OpenRouter":  ("https://openrouter.ai/api/v1/chat/completions",
-                        "google/gemini-2.0-flash-exp:free"),
-        "Anthropic":   ("https://api.anthropic.com/v1/messages",
-                        "claude-3-5-haiku-20241022"),
-        "Mistral":     ("https://api.mistral.ai/v1/chat/completions",
-                        "mistral-small-latest"),
-        "Together AI": ("https://api.together.xyz/v1/chat/completions",
-                        "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
-        "Cohere":      ("https://api.cohere.com/v2/chat",
-                        "command-r-plus-08-2024"),
+        "OpenAI":           ("https://api.openai.com/v1/chat/completions",
+                             "gpt-4o-mini"),
+        "Gemini":           ("https://generativelanguage.googleapis.com/v1beta/models",
+                             "gemini-2.0-flash"),
+        "Groq":             ("https://api.groq.com/openai/v1/chat/completions",
+                             "llama-3.3-70b-versatile"),
+        "OpenRouter":       ("https://openrouter.ai/api/v1/chat/completions",
+                             "google/gemini-2.0-flash-exp:free"),
+        "Anthropic":        ("https://api.anthropic.com/v1/messages",
+                             "claude-3-5-haiku-20241022"),
+        "Mistral":          ("https://api.mistral.ai/v1/chat/completions",
+                             "mistral-small-latest"),
+        "Mistral Codestral":("https://codestral.mistral.ai/v1/chat/completions",
+                             "codestral-latest"),
+        "Together AI":      ("https://api.together.xyz/v1/chat/completions",
+                             "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+        "Cohere":           ("https://api.cohere.com/v2/chat",
+                             "command-r-plus-08-2024"),
+        "Cerebras":         ("https://api.cerebras.ai/v1/chat/completions",
+                             "llama-3.3-70b"),
+        "NVIDIA NIM":       ("https://integrate.api.nvidia.com/v1/chat/completions",
+                             "meta/llama-3.3-70b-instruct"),
+        "GitHub Models":    ("https://models.inference.ai.azure.com/chat/completions",
+                             "gpt-4o-mini"),
+        "Fireworks":        ("https://api.fireworks.ai/inference/v1/chat/completions",
+                             "accounts/fireworks/models/llama-v3p3-70b-instruct"),
+        "Nebius":           ("https://api.studio.nebius.ai/v1/chat/completions",
+                             "meta-llama/Llama-3.3-70B-Instruct"),
+        "Novita":           ("https://api.novita.ai/v3/openai/chat/completions",
+                             "meta-llama/llama-3.3-70b-instruct"),
+        "Hyperbolic":       ("https://api.hyperbolic.xyz/v1/chat/completions",
+                             "meta-llama/Llama-3.3-70B-Instruct"),
+        "SambaNova":        ("https://api.sambanova.ai/v1/chat/completions",
+                             "Meta-Llama-3.3-70B-Instruct"),
+        "Scaleway":         ("https://api.scaleway.ai/v1/chat/completions",
+                             "llama-3.3-70b-instruct"),
+        "Inference.net":    ("https://api.inference.net/v1/chat/completions",
+                             "meta-llama/llama-3.3-70b-instruct/fp-8"),
     }
     MAX_RETRIES  = 4
     BASE_BACKOFF = 10
@@ -1656,14 +1678,17 @@ class MainWindow(QMainWindow):
         self.cmb_provider = QComboBox()
         self.cmb_provider.addItems([
             "OpenAI", "Gemini", "Groq", "OpenRouter", "Anthropic",
-            "Mistral", "Together AI", "Cohere",
+            "Mistral", "Mistral Codestral", "Together AI", "Cohere",
+            "Cerebras", "NVIDIA NIM", "GitHub Models", "Fireworks",
+            "Nebius", "Novita", "Hyperbolic", "SambaNova", "Scaleway",
+            "Inference.net",
         ])
         self.cmb_provider.currentTextChanged.connect(self._on_provider)
         form.addRow("LLM Provider:", self.cmb_provider)
 
         self.inp_model = QLineEdit()
-        self.inp_model.setPlaceholderText("openai/gpt-oss-120b")
-        self.inp_model.setText("openai/gpt-oss-120b")
+        self.inp_model.setPlaceholderText("gpt-4o-mini")
+        self.inp_model.setText("gpt-4o-mini")
         form.addRow("Model:", self.inp_model)
 
         self.inp_api_key = QLineEdit()
@@ -1895,14 +1920,25 @@ class MainWindow(QMainWindow):
             self._append_log("Could not extract sender info from CV (LLM will derive from CV text).", "warn")
 
     _PROVIDER_DEFAULTS = {
-        "OpenAI":      "openai/gpt-oss-120b",
-        "Gemini":      "gemini-2.0-flash",
-        "Groq":        "llama-3.3-70b-versatile",
-        "OpenRouter":  "google/gemini-2.0-flash-exp:free",
-        "Anthropic":   "claude-3-5-haiku-20241022",
-        "Mistral":     "mistral-small-latest",
-        "Together AI": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "Cohere":      "command-r-plus-08-2024",
+        "OpenAI":            "gpt-4o-mini",
+        "Gemini":            "gemini-2.0-flash",
+        "Groq":              "llama-3.3-70b-versatile",
+        "OpenRouter":        "google/gemini-2.0-flash-exp:free",
+        "Anthropic":         "claude-3-5-haiku-20241022",
+        "Mistral":           "mistral-small-latest",
+        "Mistral Codestral": "codestral-latest",
+        "Together AI":       "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "Cohere":            "command-r-plus-08-2024",
+        "Cerebras":          "llama-3.3-70b",
+        "NVIDIA NIM":        "meta/llama-3.3-70b-instruct",
+        "GitHub Models":     "gpt-4o-mini",
+        "Fireworks":         "accounts/fireworks/models/llama-v3p3-70b-instruct",
+        "Nebius":            "meta-llama/Llama-3.3-70B-Instruct",
+        "Novita":            "meta-llama/llama-3.3-70b-instruct",
+        "Hyperbolic":        "meta-llama/Llama-3.3-70B-Instruct",
+        "SambaNova":         "Meta-Llama-3.3-70B-Instruct",
+        "Scaleway":          "llama-3.3-70b-instruct",
+        "Inference.net":     "meta-llama/llama-3.3-70b-instruct/fp-8",
     }
 
     def _on_provider(self, text: str):
