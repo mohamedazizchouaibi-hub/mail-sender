@@ -1,118 +1,111 @@
 # Email Outreach Automation
 
-A desktop app that uses any LLM to write and send personalized cold emails at scale — from your CV and a contacts CSV.
+A desktop application that uses your favorite LLM to generate and send personalized cold emails at scale using your CV and a contacts CSV file.
+
+## Demo Video
+
+Watch the complete usage walkthrough:
+
+**Video Tutorial:**  
+https://drive.google.com/file/d/1f8DgNx43uJV5GagRr3rjvDFdJNQYpeq6/view?usp=drive_link
+
+---
 
 ## Features
 
-- **LLM-powered personalization** — reads your CV and generates a unique email for each contact
-- **Smart CV extraction** — on first run the LLM extracts your name, phone, email, and LinkedIn from the CV automatically; re-runs on demand if you enter your API key after loading the CV
-- **8 LLM providers** — OpenAI, Gemini, Groq, OpenRouter, Anthropic, Mistral, Together AI, Cohere
-- **Email template** — optionally upload a `.txt`, `.pdf`, or `.docx` template; the LLM follows its structure and tone while still personalizing per recipient
-- **Company research** — optionally scrapes each company's website (or DuckDuckGo) before writing
-- **Draft review** — generate all emails first, edit subject and body inline in the review table, then send only what you approve
-- **Persistent settings** — all inputs (files, credentials, provider, goal, checkboxes) are saved automatically and restored on next launch; you never have to re-enter them
-- **Safe sending** — configurable delay between emails, pause/resume/stop at any time
-- **CV attachment** — optionally attach your CV to every email
-- **SMTP test** — verify your Gmail credentials before launching a campaign
-- **Activity log** — color-coded log with entry count, saved to `outreach_log.json`
+### AI-Powered Personalization
 
-## Setup
+- Generates unique cold emails for every contact using any supported LLM.
+- Uses your CV and recipient information to create tailored outreach messages.
+
+### Automatic CV Extraction
+
+- Extracts key information from your CV:
+  - Name
+  - Email
+  - Phone number
+  - LinkedIn profile
+- Automatically runs on first load.
+- Can be re-run at any time after adding or updating your API key.
+
+### Multiple LLM Providers
+
+Supports 8 providers:
+
+- OpenAI
+- Gemini
+- Groq
+- OpenRouter
+- Anthropic
+- Mistral
+- Together AI
+- Cohere
+
+### Email Templates
+
+Optionally upload a template in:
+
+- `.txt`
+- `.pdf`
+- `.docx`
+
+The AI follows the template's structure, tone, and style while personalizing each message.
+
+### Company Research
+
+- Scrapes company websites when available.
+- Falls back to DuckDuckGo search if no website is provided.
+- Uses gathered information to improve personalization.
+
+### Draft Review & Editing
+
+- Generate all emails before sending.
+- Review subjects and email bodies in a dedicated table.
+- Edit any draft directly inside the application.
+- Send only the emails you approve.
+
+### Persistent Settings
+
+Automatically saves and restores:
+
+- CV path
+- Contacts CSV path
+- Template path
+- SMTP credentials
+- Selected LLM provider
+- Model name
+- Campaign goal
+- Application settings
+
+No need to re-enter information every time.
+
+### Safe Email Sending
+
+- Configurable delay between emails.
+- Pause campaigns.
+- Resume campaigns.
+- Stop campaigns at any time.
+
+### CV Attachment Support
+
+Optionally attach your CV to every outgoing email.
+
+### SMTP Verification
+
+Test your Gmail SMTP credentials before launching a campaign.
+
+### Activity Logging
+
+- Color-coded application log.
+- Tracks campaign activity and status.
+- Automatically saved to `outreach_log.json`.
+
+---
+
+## Installation
+
+### 1. Clone the Repository
 
 ```bash
-# 1. Clone and enter the folder
-git clone https://github.com/mohamedazizchouaibi-hub/mail-sender
+git clone https://github.com/mohamedazizchouaibi-hub/mail-sender.git
 cd mail-sender
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Run
-python email_outreach_app.py
-```
-
-> **Python 3.9+** required.
-
-## Gmail App Password
-
-Google requires an App Password (not your regular password) when using SMTP:
-
-1. Enable 2-Step Verification on your Google account
-2. Go to **Google Account → Security → App Passwords**
-3. Create a password for "Mail" → copy the 16-character code
-4. Paste it into the **App Password** field in the app
-
-## Contacts CSV format
-
-The CSV must have at least an `email` column. All other columns are optional but used for personalization:
-
-| Column | Aliases recognized |
-|--------|--------------------|
-| `email` | `e-mail`, `email_address`, `mail` |
-| `name` | `full_name`, `first_name`, `contact` |
-| `company` | `organization`, `employer`, `firm` |
-| `role` | `position`, `title`, `job_title` |
-| `website` | `url`, `homepage`, `site` |
-
-Any extra columns are included in the prompt as additional context.
-
-**Example:**
-
-```csv
-name,email,company,role,website
-Alice Smith,alice@example.com,Acme Corp,Engineering Lead,acme.com
-Bob Jones,bob@techco.io,TechCo,CTO,
-```
-
-## Email Template (optional)
-
-Upload a `.txt`, `.pdf`, or `.docx` file containing a sample email. The LLM will follow its structure, tone, and length while replacing all placeholder content with personalized details for each recipient. Leave blank to let the LLM write freely from the prompt rules.
-
-## Workflow
-
-### Option A — Generate Drafts (recommended)
-1. Fill in all fields and click **Generate Drafts**
-2. Review every email in the table — click any row to edit its subject or body directly
-3. Uncheck rows you want to skip
-4. Click **Send** — emails go out with the configured delay
-
-### Option B — Start Campaign
-Generates and sends each email immediately (one by one). Enable **Preview each email** in Settings to approve each one before it sends.
-
-### Settings persistence
-Every field is saved automatically to `outreach_settings.json` in the working directory. On the next launch the app restores all inputs including file paths — if the files still exist they are re-loaded silently.
-
-## Supported LLM Providers
-
-| Provider | Default model |
-|----------|--------------|
-| OpenAI | `openai/gpt-oss-120b` |
-| Gemini | `gemini-2.0-flash` |
-| Groq | `llama-3.3-70b-versatile` |
-| OpenRouter | `google/gemini-2.0-flash-exp:free` |
-| Anthropic | `claude-3-5-haiku-20241022` |
-| Mistral | `mistral-small-latest` |
-| Together AI | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
-| Cohere | `command-r-plus-08-2024` |
-
-You can override the model by typing any model ID into the **Model** field.
-
-## Files created at runtime
-
-| File | Purpose |
-|------|---------|
-| `outreach_settings.json` | Saved inputs restored on next launch |
-| `outreach_log.json` | Full activity log of all campaigns |
-
-## Optional dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `pandas` | Faster / more robust CSV parsing |
-| `PyPDF2` or `pypdf` | Read PDF CVs and templates |
-| `python-docx` | Read DOCX CVs and templates |
-
-The app runs without these but will show a warning if the relevant file type is loaded.
-
-## License
-
-MIT
